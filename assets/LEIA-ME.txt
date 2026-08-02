@@ -1,0 +1,7 @@
+Coloque aqui as imagens dos convites, com EXATAMENTE estes nomes:
+
+  convite_alice.png    -> convite da Alice (tema cereja / rosa)
+  convite_helena.png   -> convite da Helena (tema abelhinha / amarelo)
+
+Pode ser .png ou .jpg, mas se usar .jpg altere os nomes em config.py
+(CONVITE_ALICE e CONVITE_HELENA).
