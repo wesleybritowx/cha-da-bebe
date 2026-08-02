@@ -9,8 +9,11 @@ import os
 import streamlit as st
 
 import config
+from analytics import injetar_ga
 from estilo import aplicar_estilo
 from sheets import registrar_confirmacao
+
+injetar_ga()
 
 st.set_page_config(page_title=config.NOME_EVENTO, page_icon="🍼")
 aplicar_estilo()
