@@ -23,6 +23,12 @@ EVENTO_MAPS_URL = "https://www.google.com.br/maps/place/Espaco+%C2%B4R+C%C2%B4/@
 # Link da previsão do tempo (São Vicente). Deixe "" para ocultar o botão.
 EVENTO_CLIMA_URL = "https://www.meteoprog.com/pt/weather/Saovicente/month/september/"
 
+# Aviso em destaque na tela do convidado. Deixe "" para ocultar.
+AVISO = (
+    "🏊 O local tem piscina! Tragam roupa de banho para a criançada "
+    "e fiquem de olho nas crianças perto da água. 💦"
+)
+
 # Grupos de convidados (aparecem no seletor)
 GRUPOS = [
     "Chá da Helena (Dayane & Wesley)",
