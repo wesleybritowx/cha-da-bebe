@@ -46,6 +46,24 @@ if _clima_url:
 else:
     st.link_button("📍 Ver o local no Google Maps", _maps_url, use_container_width=True)
 
+# Aviso em destaque (ex.: piscina no local)
+if getattr(config, "AVISO", ""):
+    st.markdown(
+        f"""
+        <div style="
+            background: rgba(120, 200, 245, 0.25);
+            border: 1px solid rgba(70, 160, 220, 0.55);
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin: 8px 0 4px 0;
+            font-size: 1.02rem;
+            text-align: center;">
+            {config.AVISO}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 # --- Convites (as duas imagens) ---
 # Força as duas imagens a terem a MESMA altura, sem distorcer nem cortar
 # (proporções diferentes ficam centralizadas dentro de uma caixa de altura fixa).
