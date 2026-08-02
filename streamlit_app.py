@@ -5,6 +5,7 @@ grupo e confirma a presença; os dados vão para uma planilha do Google Sheets.
 """
 
 import os
+import urllib.parse
 
 import streamlit as st
 
@@ -30,6 +31,20 @@ st.markdown(
 📍 **{config.EVENTO_LOCAL}**
 """
 )
+
+# Botões: local no Google Maps e previsão do tempo
+_maps_url = getattr(config, "EVENTO_MAPS_URL", "") or (
+    "https://www.google.com/maps/search/?api=1&query="
+    + urllib.parse.quote(config.EVENTO_LOCAL)
+)
+_clima_url = getattr(config, "EVENTO_CLIMA_URL", "")
+
+if _clima_url:
+    b1, b2 = st.columns(2)
+    b1.link_button("📍 Ver o local no Google Maps", _maps_url, use_container_width=True)
+    b2.link_button("🌦️ Ver a previsão do tempo", _clima_url, use_container_width=True)
+else:
+    st.link_button("📍 Ver o local no Google Maps", _maps_url, use_container_width=True)
 
 # --- Convites (as duas imagens) ---
 # Força as duas imagens a terem a MESMA altura, sem distorcer nem cortar
