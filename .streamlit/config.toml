@@ -1,0 +1,13 @@
+[client]
+# Esconde a lista de páginas na sidebar. A página "Organizador" continua
+# acessível apenas por quem digita a URL .../Organizador
+showSidebarNavigation = false
+
+[theme]
+# Tema claro (o gradiente rosa→amarelo é aplicado por CSS no app)
+base = "light"
+primaryColor = "#e75480"                # rosa (botões e destaques)
+backgroundColor = "#ffe3ee"             # fundo (fallback, sob o gradiente)
+secondaryBackgroundColor = "#fff6d0"    # inputs e sidebar (amarelo claro)
+textColor = "#4a2c37"                   # texto (marrom/rosado escuro, boa leitura)
+font = "sans serif"

@@ -9,9 +9,11 @@ import os
 import streamlit as st
 
 import config
+from estilo import aplicar_estilo
 from sheets import registrar_confirmacao
 
 st.set_page_config(page_title=config.NOME_EVENTO, page_icon="🍼")
+aplicar_estilo()
 
 st.title(f"🍼 {config.NOME_EVENTO}")
 if config.SUBTITULO:

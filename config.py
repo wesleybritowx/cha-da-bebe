@@ -19,16 +19,16 @@ EVENTO_LOCAL = "Rua Antônio Riscalla Husne, 692 — Jardim Rio Branco"
 
 # Grupos de convidados (aparecem no seletor)
 GRUPOS = [
-    "Dayane & Wesley",
-    "Dayara & Maurício",
-    "Família",
+    "Chá da Helena (Dayane & Wesley)",
+    "Chá da Alice (Dayara & Maurício)",
+    "Ambos",
 ]
 
 # Qual bebê cada grupo está celebrando (texto exibido após escolher o grupo)
 GRUPO_BEBE = {
-    "Dayane & Wesley": "Helena",
-    "Dayara & Maurício": "Alice",
-    "Família": "Alice e Helena",
+    "Chá da Helena (Dayane & Wesley)": "Helena",
+    "Chá da Alice (Dayara & Maurício)": "Alice",
+    "Ambos": "Alice e Helena",
 }
 
 # Imagens dos convites (salve os arquivos na pasta assets/ com estes nomes)

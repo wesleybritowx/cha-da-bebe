@@ -6,9 +6,11 @@ Mostra todas as confirmações, filtros, métricas e download em CSV.
 import streamlit as st
 
 import config
+from estilo import aplicar_estilo
 from sheets import carregar_confirmacoes, senha_organizador
 
 st.set_page_config(page_title="Organizador", page_icon="📋")
+aplicar_estilo()
 
 st.title("📋 Painel do Organizador")
 
