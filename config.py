@@ -13,7 +13,7 @@ NOME_EVENTO = "Chá de Bebê da Alice & da Helena"
 SUBTITULO = "Confirme sua presença! 🍒🐝"
 
 # Dados do evento (iguais para os dois)
-EVENTO_DATA = "13 de setembro de 2026 (sábado)"
+EVENTO_DATA = "13 de setembro de 2026 (domingo)"
 EVENTO_HORA = "13h"
 EVENTO_LOCAL = "Rua Antônio Riscalla Husne, 692 — Jardim Rio Branco"
 # Link do Google Maps do local (Espaço ´R C´ — São Vicente/SP).
