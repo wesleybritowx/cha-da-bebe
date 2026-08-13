@@ -12,3 +12,7 @@ env/
 # Sistema
 .DS_Store
 Thumbs.db
+
+# Arquivos de trabalho locais
+arte/
+molde/
