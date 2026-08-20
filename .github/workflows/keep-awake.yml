@@ -2,9 +2,14 @@ name: Keep Streamlit Awake
 
 on:
   schedule:
-    # A cada 6 horas, em UTC (o GitHub pode atrasar alguns minutos em horarios de pico)
+    # A cada 3 horas, em UTC (o GitHub pode atrasar alguns minutos em horarios de pico)
     - cron: "0 */3 * * *"
   workflow_dispatch:
+    inputs:
+      allow_ga:
+        description: "Deixar este ping aparecer no Google Analytics (so para verificar)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,7 +17,7 @@ permissions:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -20,8 +25,22 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Instala dependencias
-        run: pip install requests
+      - name: Instala Playwright e o Chromium
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
 
       - name: Ping app
+        env:
+          # Nos disparos agendados a entrada vem vazia, entao fica desligado.
+          PING_ALLOW_GA: ${{ inputs.allow_ga && '1' || '0' }}
+          PING_SCREENSHOT: ping.png
         run: python .github/scripts/ping_app.py
+
+      - name: Guarda o screenshot se falhar
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ping-screenshot
+          path: ping.png
+          if-no-files-found: ignore

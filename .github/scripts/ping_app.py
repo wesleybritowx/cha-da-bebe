@@ -1,87 +1,175 @@
 """Ping do app no Streamlit Cloud para evitar o standby por inatividade.
 
-A raiz do app responde 303 e passa por um fluxo de auth que so termina se o
-cliente guardar o cookie de sessao. Um curl simples nao guarda, entra em loop
-de redirect e falha. Aqui usamos requests.Session, que mantem os cookies entre
-as requisicoes e fecha o handshake como um navegador faria.
+Requisicao HTTP simples nao serve: o Streamlit so conta uma sessao ativa
+quando o navegador executa o JS e abre o WebSocket em /_stcore/stream. Por
+isso aqui usamos um Chromium headless de verdade, que carrega a pagina,
+espera o WebSocket subir e mantem a aba aberta por alguns segundos.
+
+Dois detalhes que custaram caro e por isso estao anotados:
+
+1. No Streamlit Cloud o app roda dentro de um iframe (/~/+/), entao o
+   innerText da pagina de cima tem so algumas dezenas de caracteres. O
+   conteudo precisa ser conferido dentro do frame.
+2. Na API sincrona do Playwright os eventos so sao despachados durante
+   chamadas do proprio Playwright. Um time.sleep() trava a thread sem
+   despachar nada, e a lista de websockets nunca enche. Toda espera aqui
+   usa pagina.wait_for_timeout().
+
+Por padrao o script BLOQUEIA o Google Analytics, para nao encher o GA4 de
+sessoes falsas a cada 3 horas. Rode com PING_ALLOW_GA=1 quando quiser
+justamente confirmar no GA4 que o ping chegou ate o fim.
 """
 
+import os
 import sys
-import time
 
-import requests
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
+from playwright.sync_api import sync_playwright
 
 APP_URL = "https://confirme-cha.streamlit.app"
-TIMEOUT = 30
-TENTATIVAS = 3
-ESPERA_ENTRE_TENTATIVAS = 10
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-    ),
-    "Accept": (
-        "text/html,application/xhtml+xml,application/xml;q=0.9,"
-        "image/avif,image/webp,*/*;q=0.8"
-    ),
-    "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1",
-}
+SEGUNDOS_NA_PAGINA = 20      # aba aberta apos conectar, para contar a sessao
+TIMEOUT_MS = 90_000
+TIMEOUT_WEBSOCKET_MS = 60_000
+TIMEOUT_CONTEUDO_MS = 60_000
+MIN_CARACTERES = 200         # conteudo minimo esperado dentro do iframe
+
+# UA real: o Chromium headless anuncia "HeadlessChrome" por padrao, o que faz
+# o GA4 descartar o acesso como bot.
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+)
+
+PERMITIR_GA = os.environ.get("PING_ALLOW_GA") == "1"
+CAMINHO_SCREENSHOT = os.environ.get("PING_SCREENSHOT", "ping.png")
 
 
-def ping():
-    """Abre uma sessao no app. Devolve True se o app respondeu 200."""
-    with requests.Session() as sessao:
-        sessao.headers.update(HEADERS)
+def esperar(pagina, condicao, timeout_ms, passo_ms=500):
+    """Espera `condicao()` virar verdadeira.
 
-        # 1) Raiz: passa pelo fluxo de auth e estabelece o cookie de sessao.
-        inicio = time.monotonic()
-        resposta = sessao.get(APP_URL, timeout=TIMEOUT, allow_redirects=True)
-        duracao = time.monotonic() - inicio
+    Usa pagina.wait_for_timeout (e nao time.sleep) para que o Playwright
+    despache os eventos de rede enquanto esperamos.
+    """
+    for _ in range(max(1, timeout_ms // passo_ms)):
+        if condicao():
+            return True
+        pagina.wait_for_timeout(passo_ms)
+    return condicao()
 
-        print(f"GET /            -> {resposta.status_code} "
-              f"({duracao:.2f}s, {len(resposta.history)} redirects)")
 
-        cookies = ", ".join(sessao.cookies.keys()) or "nenhum"
-        print(f"cookies da sessao: {cookies}")
+def frame_do_app(pagina):
+    """Devolve o frame onde o app roda, ou None se ainda nao existe."""
+    for frame in pagina.frames:
+        if "/~/+/" in frame.url:
+            return frame
+    return None
 
-        if resposta.status_code != 200:
-            print(f"URL final: {resposta.url}")
-            return False
 
-        # 2) Segunda requisicao reaproveitando o cookie, ja sem passar pelo auth.
-        #    So responde 200 se a sessao do passo anterior valeu de fato.
-        health = sessao.get(
-            f"{APP_URL}/_stcore/health", timeout=TIMEOUT, allow_redirects=True
+def texto_do_app(pagina):
+    """Quantidade de texto ja renderizada dentro do iframe do app."""
+    frame = frame_do_app(pagina)
+    if frame is None:
+        return 0
+    try:
+        return frame.evaluate(
+            "document.body ? document.body.innerText.trim().length : 0"
         )
-        print(f"GET /_stcore/health -> {health.status_code} "
-              f"({len(health.content)} bytes)")
-
-        return health.status_code == 200
+    except Exception:
+        return 0  # frame navegando; tenta de novo no proximo passo
 
 
 def main():
-    for tentativa in range(1, TENTATIVAS + 1):
-        print(f"--- tentativa {tentativa}/{TENTATIVAS} ---")
+    websockets = []
+    ga_requests = []
+    conectou = False
+    renderizou = False
+
+    with sync_playwright() as p:
+        navegador = p.chromium.launch(
+            args=["--disable-blink-features=AutomationControlled"]
+        )
+        contexto = navegador.new_context(
+            user_agent=USER_AGENT,
+            viewport={"width": 1366, "height": 768},
+            locale="pt-BR",
+            timezone_id="America/Sao_Paulo",
+        )
+        pagina = contexto.new_page()
+        pagina.on("websocket", lambda ws: websockets.append(ws.url))
+
+        if PERMITIR_GA:
+            pagina.on(
+                "request",
+                lambda req: (
+                    ga_requests.append(req.url)
+                    if "googletagmanager.com" in req.url
+                    or "google-analytics.com" in req.url
+                    else None
+                ),
+            )
+        else:
+            # Corta o gtag para o ping nao virar sessao no relatorio do GA4.
+            pagina.route("**://*.googletagmanager.com/**", lambda r: r.abort())
+            pagina.route("**://*.google-analytics.com/**", lambda r: r.abort())
+
+        print(f"abrindo {APP_URL} ...")
         try:
-            if ping():
-                print("\nApp acordado com sucesso.")
-                return 0
-        except requests.RequestException as erro:
-            print(f"falhou: {type(erro).__name__}: {erro}")
+            resposta = pagina.goto(
+                APP_URL, wait_until="domcontentloaded", timeout=TIMEOUT_MS
+            )
+            print(f"HTTP {resposta.status if resposta else '?'} -> {pagina.url}")
 
-        if tentativa < TENTATIVAS:
-            time.sleep(ESPERA_ENTRE_TENTATIVAS)
+            # 1) WebSocket: e isso que o Streamlit conta como sessao ativa.
+            conectou = esperar(
+                pagina,
+                lambda: any("_stcore/stream" in u for u in websockets),
+                TIMEOUT_WEBSOCKET_MS,
+            )
+            print("websocket conectado" if conectou else "websocket NAO subiu")
 
-    print("\nApp nao respondeu 200 apos todas as tentativas.")
-    return 1
+            # 2) Conteudo dentro do iframe, para saber que o app rodou mesmo.
+            renderizou = esperar(
+                pagina,
+                lambda: texto_do_app(pagina) > MIN_CARACTERES,
+                TIMEOUT_CONTEUDO_MS,
+            )
+            print(f"texto renderizado no app: {texto_do_app(pagina)} caracteres")
+
+            # 3) Mantem a aba viva para a sessao ser contabilizada.
+            pagina.wait_for_timeout(SEGUNDOS_NA_PAGINA * 1000)
+            print(f"titulo: {pagina.title()}")
+
+        except PlaywrightTimeout as erro:
+            print(f"TIMEOUT: {str(erro).splitlines()[0]}")
+        finally:
+            try:
+                pagina.screenshot(path=CAMINHO_SCREENSHOT, full_page=True)
+                print(f"screenshot: {CAMINHO_SCREENSHOT}")
+            except Exception as erro:
+                print(f"nao consegui salvar screenshot: {erro}")
+            navegador.close()
+
+    print(f"\nwebsockets abertos: {len(websockets)}")
+    for url in websockets:
+        print(f"  - {url}")
+
+    if PERMITIR_GA:
+        print(f"requisicoes de GA disparadas: {len(ga_requests)}")
+        for url in ga_requests[:6]:
+            print(f"  - {url[:110]}")
+    else:
+        print("GA bloqueado (rode com PING_ALLOW_GA=1 para permitir)")
+
+    if not conectou:
+        print("\nFALHOU: sem WebSocket, o Streamlit nao conta sessao.")
+        return 1
+    if not renderizou:
+        print("\nFALHOU: WebSocket subiu mas o app nao renderizou conteudo.")
+        return 1
+
+    print("\nSessao real estabelecida. App acordado.")
+    return 0
 
 
 if __name__ == "__main__":
