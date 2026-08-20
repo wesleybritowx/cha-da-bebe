@@ -3,7 +3,7 @@ name: Keep Streamlit Awake
 on:
   schedule:
     # A cada 6 horas, em UTC (o GitHub pode atrasar alguns minutos em horarios de pico)
-    - cron: "0 */6 * * *"
+    - cron: "0 */3 * * *"
   workflow_dispatch:
 
 permissions:
