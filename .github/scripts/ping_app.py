@@ -15,18 +15,31 @@ Dois detalhes que custaram caro e por isso estao anotados:
    despachar nada, e a lista de websockets nunca enche. Toda espera aqui
    usa pagina.wait_for_timeout().
 
-Por padrao o script BLOQUEIA o Google Analytics, para nao encher o GA4 de
-sessoes falsas a cada 3 horas. Rode com PING_ALLOW_GA=1 quando quiser
-justamente confirmar no GA4 que o ping chegou ate o fim.
+O ping aparece no GA4 de proposito: e assim que da para saber que ele esta
+funcionando. Para nao se misturar com os convidados, a URL leva marcadores
+utm (source=github-actions), entao no GA4 os pings ficam identificados e
+podem ser excluidos dos relatorios. Rode com PING_BLOCK_GA=1 para cortar o
+Google Analytics de um disparo especifico.
 """
 
 import os
 import sys
+from urllib.parse import urlencode
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
-APP_URL = "https://confirme-cha.streamlit.app"
+APP_URL_BASE = "https://confirme-cha.streamlit.app"
+
+# Marcadores utm: sobrevivem ao redirect de auth e chegam no page_location do
+# GA4, entao o ping aparece como origem "github-actions" e nao se confunde
+# com visita de convidado.
+PARAMS_PING = {
+    "utm_source": "github-actions",
+    "utm_medium": "keepalive",
+    "utm_campaign": "manter-app-acordado",
+}
+APP_URL = f"{APP_URL_BASE}/?{urlencode(PARAMS_PING)}"
 
 SEGUNDOS_NA_PAGINA = 20      # aba aberta apos conectar, para contar a sessao
 TIMEOUT_MS = 90_000
@@ -41,7 +54,7 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
-PERMITIR_GA = os.environ.get("PING_ALLOW_GA") == "1"
+PERMITIR_GA = os.environ.get("PING_BLOCK_GA") != "1"
 CAMINHO_SCREENSHOT = os.environ.get("PING_SCREENSHOT", "ping.png")
 
 
@@ -155,11 +168,13 @@ def main():
         print(f"  - {url}")
 
     if PERMITIR_GA:
-        print(f"requisicoes de GA disparadas: {len(ga_requests)}")
-        for url in ga_requests[:6]:
-            print(f"  - {url[:110]}")
+        coletas = [u for u in ga_requests if "/g/collect" in u]
+        print(f"requisicoes de GA disparadas: {len(ga_requests)} "
+              f"(sendo {len(coletas)} coletas do GA4)")
+        if not coletas:
+            print("  atencao: nenhuma coleta saiu; o GA4 nao vera este ping")
     else:
-        print("GA bloqueado (rode com PING_ALLOW_GA=1 para permitir)")
+        print("GA bloqueado nesta execucao (PING_BLOCK_GA=1)")
 
     if not conectou:
         print("\nFALHOU: sem WebSocket, o Streamlit nao conta sessao.")

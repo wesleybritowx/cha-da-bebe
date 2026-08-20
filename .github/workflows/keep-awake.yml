@@ -6,8 +6,8 @@ on:
     - cron: "0 */3 * * *"
   workflow_dispatch:
     inputs:
-      allow_ga:
-        description: "Deixar este ping aparecer no Google Analytics (so para verificar)"
+      block_ga:
+        description: "Cortar o Google Analytics neste disparo (por padrao o ping aparece no GA4)"
         type: boolean
         default: false
 
@@ -32,8 +32,8 @@ jobs:
 
       - name: Ping app
         env:
-          # Nos disparos agendados a entrada vem vazia, entao fica desligado.
-          PING_ALLOW_GA: ${{ inputs.allow_ga && '1' || '0' }}
+          # Nos disparos agendados a entrada vem vazia, entao o GA fica ligado.
+          PING_BLOCK_GA: ${{ inputs.block_ga && '1' || '0' }}
           PING_SCREENSHOT: ping.png
         run: python .github/scripts/ping_app.py
 
